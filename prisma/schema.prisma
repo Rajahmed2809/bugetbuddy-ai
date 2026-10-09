@@ -1,0 +1,145 @@
+// BudgetBuddy AI — Prisma schema
+// Personal finance management with AI-powered insights
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  avatarColor  String   @default("green")
+  currency     String   @default("USD")
+  onboarded    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  transactions       Transaction[]
+  budgets            Budget[]
+  goals              SavingsGoal[]
+  recurring          RecurringTransaction[]
+  notifications      Notification[]
+  preferences        UserPreference?
+  categories         Category[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  icon      String   @default("CircleDollarSign")
+  color     String   @default("green")
+  isDefault Boolean  @default(false)
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([profileId])
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  type        String   // 'income' | 'expense'
+  name        String
+  amount      Float
+  date        DateTime
+  category    String
+  paymentMethod String @default("card")
+  note        String?
+  receiptUrl  String?
+  isRecurring Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  categoryRef Category? @relation(fields: [categoryId], references: [id])
+
+  categoryId String?
+
+  @@index([profileId, date])
+  @@index([profileId, type])
+  @@index([profileId, category])
+}
+
+model Budget {
+  id        String   @id @default(cuid())
+  category  String   // 'overall' or category name
+  limit     Float
+  period    String   @default("monthly")
+  spent     Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, category])
+}
+
+model SavingsGoal {
+  id          String   @id @default(cuid())
+  name        String
+  targetAmount Float
+  currentAmount Float @default(0)
+  targetDate  DateTime?
+  color       String   @default("green")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+model RecurringTransaction {
+  id        String   @id @default(cuid())
+  name      String
+  amount    Float
+  type      String   // 'income' | 'expense'
+  category   String
+  frequency String   // 'daily' | 'weekly' | 'monthly' | 'yearly'
+  nextDate  DateTime
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, nextDate])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String   // 'budget' | 'recurring' | 'goal' | 'summary'
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, read])
+}
+
+model UserPreference {
+  id              String   @id @default(cuid())
+  theme           String   @default("dark")
+  currency        String   @default("USD")
+  notifyBudget    Boolean  @default(true)
+  notifyRecurring Boolean  @default(true)
+  notifyGoals     Boolean  @default(true)
+  notifySummary   Boolean  @default(true)
+  reduceMotion    Boolean  @default(false)
+
+  profileId String   @unique
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}

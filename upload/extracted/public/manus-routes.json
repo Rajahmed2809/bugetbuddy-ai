@@ -1,0 +1,5 @@
+{
+  "routes": [
+    { "path": "/", "title": "BudgetBuddy AI — Your Intelligent Money Companion" }
+  ]
+}
