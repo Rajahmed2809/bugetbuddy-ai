@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   ScanLine,
   Upload,
@@ -12,11 +12,12 @@ import {
   RotateCcw,
   Loader2,
   FileText,
+  SwitchCamera,
+  Images,
 } from 'lucide-react'
 import { useStore } from '@/lib/store'
-import { formatCurrency, todayISO } from '@/lib/format'
-import { DEFAULT_CATEGORIES, CATEGORY_COLORS } from '@/lib/types'
 import type { Transaction } from '@/lib/types'
+import { DEFAULT_CATEGORIES, CATEGORY_COLORS } from '@/lib/types'
 import { Button } from '../shared'
 
 type ScanStage = 'upload' | 'scanning' | 'review' | 'saved'
@@ -41,12 +42,16 @@ export function ReceiptScannerView() {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [extracted, setExtracted] = useState<ExtractedData | null>(null)
   const [error, setError] = useState('')
+  const [showCamera, setShowCamera] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       setError('Please upload an image file (PNG, JPG, etc.)')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Image is too large. Please use an image under 10MB.')
       return
     }
     setError('')
@@ -89,6 +94,15 @@ export function ReceiptScannerView() {
     setExtracted(null)
     setError('')
   }
+
+  const handleCapturedBlob = useCallback(
+    (blob: Blob) => {
+      setShowCamera(false)
+      const file = new File([blob], `receipt-${Date.now()}.jpg`, { type: 'image/jpeg' })
+      handleFile(file)
+    },
+    []
+  )
 
   const handleSave = () => {
     if (!extracted) return
@@ -171,7 +185,7 @@ export function ReceiptScannerView() {
               <Button onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click() }} icon={<Upload size={16} />}>
                 Choose file
               </Button>
-              <Button variant="ghost" onClick={(e) => { e.stopPropagation(); cameraInputRef.current?.click() }} icon={<Camera size={16} />}>
+              <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setShowCamera(true) }} icon={<Camera size={16} />}>
                 Use camera
               </Button>
             </div>
@@ -180,15 +194,7 @@ export function ReceiptScannerView() {
               type="file"
               accept="image/*"
               style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-            />
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }}
             />
           </div>
 
@@ -267,8 +273,218 @@ export function ReceiptScannerView() {
           </div>
         </div>
       )}
+
+      {/* Camera modal */}
+      {showCamera && (
+        <CameraCapture
+          onCapture={handleCapturedBlob}
+          onClose={() => setShowCamera(false)}
+          onError={(msg) => {
+            setShowCamera(false)
+            setError(msg)
+          }}
+        />
+      )}
     </div>
   )
+}
+
+// ===== Live Camera Capture Component =====
+// Uses getUserMedia() for real in-browser camera access — works on both desktop (webcam)
+// and mobile (front/back camera). More reliable than the HTML capture attribute.
+function CameraCapture({
+  onCapture,
+  onClose,
+  onError,
+}: {
+  onCapture: (blob: Blob) => void
+  onClose: () => void
+  onError: (message: string) => void
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const [ready, setReady] = useState(false)
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
+  const [error, setError] = useState('')
+
+  const stopStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+    }
+  }, [])
+
+  const startCamera = useCallback(async (mode: 'environment' | 'user') => {
+    stopStream()
+    setError('')
+    setReady(false)
+
+    // Check if getUserMedia is available
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      const msg = 'Camera is not supported in this browser. Please upload a receipt image instead.'
+      setError(msg)
+      onError(msg)
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: mode },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().then(() => setReady(true)).catch(() => setReady(true))
+        }
+      }
+    } catch (err) {
+      const e = err as DOMError
+      let msg = 'Could not access the camera.'
+      if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+        msg = 'Camera access was denied. Please allow camera permissions in your browser settings and try again.'
+      } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
+        msg = 'No camera device found. Please upload a receipt image instead.'
+      } else if (e.name === 'NotReadableError' || e.name === 'TrackStartError') {
+        msg = 'Camera is already in use by another application. Please close it and try again.'
+      } else if (e.name === 'NotSupportedError') {
+        msg = 'Camera is not supported in this browser. Please upload a receipt image instead.'
+      }
+      setError(msg)
+    }
+  }, [stopStream, onError])
+
+  // Start/stop the camera stream when facingMode changes — this is external-system
+  // synchronization (MediaStream API), so calling startCamera here is correct.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    startCamera(facingMode)
+    return () => stopStream()
+  }, [facingMode, startCamera, stopStream])
+
+  const handleCapture = () => {
+    if (!videoRef.current || !canvasRef.current) return
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    canvas.toBlob((blob) => {
+      if (blob) {
+        stopStream()
+        onCapture(blob)
+      }
+    }, 'image/jpeg', 0.92)
+  }
+
+  const handleSwitchCamera = () => {
+    setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'))
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100,
+        background: 'rgba(0,0,0,0.85)',
+        backdropFilter: 'blur(8px)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+      }}
+    >
+      {/* Top bar */}
+      <div style={{ position: 'absolute', top: 16, left: 16, right: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 2 }}>
+        <span style={{ color: '#fff', fontSize: 16, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Camera size={20} /> Camera
+        </span>
+        <button onClick={onClose} aria-label="Close camera" style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(255,255,255,0.15)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+          <X size={20} />
+        </button>
+      </div>
+
+      {error ? (
+        <div style={{ textAlign: 'center', maxWidth: 400 }}>
+          <AlertCircle size={40} style={{ color: 'var(--orange)', margin: '0 auto 16px' }} />
+          <h3 style={{ color: '#fff', margin: '0 0 8px', fontSize: '1.2rem' }}>Camera unavailable</h3>
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', margin: '0 0 24px', lineHeight: 1.5 }}>{error}</p>
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+        </div>
+      ) : (
+        <>
+          {/* Video preview */}
+          <div style={{ position: 'relative', width: '100%', maxWidth: 500, aspectRatio: '3/4', borderRadius: 16, overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{ width: '100%', height: '100%', objectFit: 'cover', transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+            />
+            {/* Overlay frame guide */}
+            <div style={{ position: 'absolute', inset: '15% 8%', border: '2px dashed rgba(99,230,167,0.5)', borderRadius: 12, pointerEvents: 'none' }} />
+            {!ready && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
+                <Loader2 size={28} style={{ color: 'var(--green)', animation: 'spin 1.5s linear infinite' }} />
+              </div>
+            )}
+          </div>
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+          {/* Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginTop: 24 }}>
+            <button
+              onClick={handleSwitchCamera}
+              aria-label="Switch camera"
+              disabled={!ready}
+              style={{
+                width: 48, height: 48, borderRadius: '50%',
+                background: 'rgba(255,255,255,0.12)', color: '#fff',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                opacity: ready ? 1 : 0.4, cursor: ready ? 'pointer' : 'not-allowed',
+              }}
+            >
+              <SwitchCamera size={22} />
+            </button>
+            <button
+              onClick={handleCapture}
+              disabled={!ready}
+              aria-label="Capture photo"
+              style={{
+                width: 72, height: 72, borderRadius: '50%',
+                background: 'var(--green)', color: 'var(--bg)',
+                border: '4px solid rgba(255,255,255,0.3)',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                opacity: ready ? 1 : 0.4, cursor: ready ? 'pointer' : 'not-allowed',
+                transition: 'transform 0.15s ease',
+              }}
+            >
+              <Camera size={28} />
+            </button>
+            <div style={{ width: 48 }} />
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', margin: '16px 0 0', textAlign: 'center' }}>
+            Position the receipt inside the frame and tap the capture button
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+interface DOMError {
+  name: string
 }
 
 function ReviewPanel({

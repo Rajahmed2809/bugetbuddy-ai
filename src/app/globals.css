@@ -3418,6 +3418,11 @@
   .notification-item {
     padding: 14px;
   }
+
+  /* Receipt scanner review — stack on mobile */
+  .tab-view > div[style*='grid-template-columns: 1fr 1fr'] {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 @media (max-width: 480px) {
