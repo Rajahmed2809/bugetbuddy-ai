@@ -20,6 +20,8 @@ import {
   MoreHorizontal,
   Repeat,
   LogOut,
+  Menu,
+  X,
 } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { Logo } from './shared'
@@ -100,24 +102,29 @@ export function DashboardShell() {
 
   return (
     <div className="app-frame" style={{ minHeight: '100vh', borderRadius: 0, border: 0 }}>
+      {/* Mobile sidebar overlay */}
+      {mobileNavOpen && (
+        <div className="mobile-nav-overlay" onClick={() => setMobileNavOpen(false)} aria-hidden="true" />
+           )}
       {/* Sidebar */}
       <aside className={`app-sidebar ${sidebarCollapsed ? 'is-collapsed' : ''} ${mobileNavOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-top">
           <Logo compact={sidebarCollapsed} />
-          <button className="collapse-button" onClick={toggleSidebar} aria-label="Toggle sidebar">
+          <button className="collapse-button mobile-hide" onClick={toggleSidebar} aria-label="Toggle sidebar">
             {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          </button>
+          <button className="collapse-button mobile-only" onClick={() => setMobileNavOpen(false)} aria-label="Close menu">
+            <X size={18} />
           </button>
         </div>
 
-        <div className="workspace-chip" onClick={() => setAppView('Settings')}>
+        <div className="workspace-chip" onClick={() => { setAppView('Settings'); setMobileNavOpen(false) }}>
           <span className="workspace-avatar">{initials}</span>
-          {!sidebarCollapsed && (
-            <span>
-              <b>{profile?.name || 'User'}</b>
-              <small>{isDemoMode ? 'Demo workspace' : 'Personal workspace'}</small>
-            </span>
-          )}
-          {!sidebarCollapsed && <ChevronRight size={14} />}
+          <span>
+            <b>{profile?.name || 'User'}</b>
+            <small>{isDemoMode ? 'Demo workspace' : 'Personal workspace'}</small>
+          </span>
+          <ChevronRight size={14} className="mobile-hide" />
         </div>
 
         <nav className="app-nav">
@@ -128,13 +135,13 @@ export function DashboardShell() {
               onClick={() => { setAppView(label); setMobileNavOpen(false) }}
             >
               <Icon size={18} />
-              {!sidebarCollapsed && <span>{label}</span>}
-              {appView === label && !sidebarCollapsed && <i />}
+              <span>{label}</span>
+              {appView === label && <i />}
             </button>
           ))}
         </nav>
 
-        {!sidebarCollapsed && <div className="sidebar-divider" />}
+        <div className="sidebar-divider" />
 
         <nav className="app-nav secondary-nav">
           {SECONDARY_NAV.map(({ label, icon: Icon }) => (
@@ -144,63 +151,64 @@ export function DashboardShell() {
               onClick={() => { setAppView(label); setMobileNavOpen(false) }}
             >
               <Icon size={18} />
-              {!sidebarCollapsed && <span>{label}</span>}
-              {appView === label && !sidebarCollapsed && <i />}
+              <span>{label}</span>
+              {appView === label && <i />}
             </button>
           ))}
         </nav>
 
-        {!sidebarCollapsed && (
-          <div className="sidebar-bottom">
-            <div className="sidebar-ai" onClick={() => setAppView('AI Assistant')}>
-              <div className="ai-icon"><Sparkles size={15} /></div>
-              <div>
-                <b>AI companion</b>
-                <small>{unreadCount > 0 ? `${unreadCount} new insights` : 'Ask anything'}</small>
-              </div>
-              <ChevronRight size={15} />
+        <div className="sidebar-bottom">
+          <div className="sidebar-ai" onClick={() => { setAppView('AI Assistant'); setMobileNavOpen(false) }}>
+            <div className="ai-icon"><Sparkles size={15} /></div>
+            <div>
+              <b>AI companion</b>
+              <small>{unreadCount > 0 ? `${unreadCount} new insights` : 'Ask anything'}</small>
             </div>
-            <div className="sidebar-user">
-              <span className="user-avatar">{initials}</span>
-              <span>
-                <b>{profile?.name || 'User'}</b>
-                <small>{isDemoMode ? 'Demo plan' : 'Free plan'}</small>
-              </span>
-              <button onClick={(e) => { e.stopPropagation(); logout() }} aria-label="Logout" className="icon-button" style={{ width: 28, height: 28 }}>
-                <LogOut size={15} />
-              </button>
-            </div>
+            <ChevronRight size={15} className="mobile-hide" />
           </div>
-        )}
+          <div className="sidebar-user">
+            <span className="user-avatar">{initials}</span>
+            <span>
+              <b>{profile?.name || 'User'}</b>
+              <small>{isDemoMode ? 'Demo plan' : 'Free plan'}</small>
+            </span>
+            <button onClick={(e) => { e.stopPropagation(); logout() }} aria-label="Logout" className="icon-button" style={{ width: 28, height: 28 }}>
+              <LogOut size={15} />
+            </button>
+          </div>
+        </div>
       </aside>
 
       {/* Main */}
       <main className="app-main">
         <header className="app-topbar">
+          <button className="collapse-button mobile-only" onClick={() => setMobileNavOpen(!mobileNavOpen)} aria-label="Open menu">
+            <Menu size={18} />
+          </button>
           <div className="mobile-brand">
             <Logo compact />
           </div>
-          <button className="collapse-button mobile-only" onClick={() => setMobileNavOpen(!mobileNavOpen)} aria-label="Menu" style={{ display: 'none' }}>
-            <PanelLeftOpen size={17} />
-          </button>
           <div className="topbar-title">
-            <span>{dateStr}</span>
+            <span className="mobile-hide">{dateStr}</span>
             <h3>{appView}</h3>
           </div>
           <div className="topbar-actions">
-            <div className="topbar-search" onClick={() => document.getElementById('global-search')?.focus()}>
+            <div className="topbar-search mobile-hide" onClick={() => document.getElementById('global-search')?.focus()}>
               <Search size={16} />
               <input
                 id="global-search"
                 style={{ background: 'transparent', border: 0, outline: 'none', color: 'var(--text)', width: 140, fontSize: 13 }}
-                placeholder="Search transactions..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
-              <kbd>⌘ K</kbd>
+              <kbd>⌘K</kbd>
             </div>
-            <button className="icon-button has-dot" onClick={() => setAppView('Notifications')} aria-label="Notifications">
+            <button className="icon-button mobile-only" onClick={() => setAppView('Notifications')} aria-label="Notifications">
+              <Search size={18} />
+            </button>
+            <button className="icon-button has-dot mobile-hide" onClick={() => setAppView('Notifications')} aria-label="Notifications">
               <CalendarClock size={18} />
             </button>
             <button
