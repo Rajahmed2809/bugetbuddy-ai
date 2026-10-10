@@ -52,3 +52,19 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+dist/
+db/custom.db
+clear
+git
+
+/db/custom.db
+tool-results/
+upload/
+.zscripts/dev.pid
